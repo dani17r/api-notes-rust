@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: dan
+      POSTGRES_PASSWORD: danpass
+      POSTGRES_DB: dandb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data 
+ 
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 4000:8080
+ 
+volumes:
+  pgdata:
