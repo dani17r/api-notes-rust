@@ -14,6 +14,8 @@ use deadpool_postgres::{Client, GenericClient, Pool};
 use tokio_pg_mapper::FromTokioPostgresRow;
 use tokio_postgres::types::ToSql;
 
+use super::models::Ids;
+
 //--------------------------------------------------------------
 
 /* GET */
@@ -143,33 +145,32 @@ pub async fn update_one_note(
 
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
 
-    let mut stmt = include_str!("querys/update_note.sql").to_string();
+    let mut stmt = include_str!("./querys/update_note.sql").to_string();
     let mut placeholders = Vec::new();
     let mut values: Vec<&(dyn ToSql + Sync)> = Vec::new();
 
     values.push(&body_params.id);
 
     if body_params.title.is_some() {
-        placeholders.push(format!("title = ${}", values.len()+1).to_string());
+        placeholders.push(format!("title = ${}", values.len() + 1).to_string());
         values.push(&body_params.title);
     }
 
     if body_params.details.is_some() {
-        placeholders.push(format!("details = ${}", values.len()+1).to_string());
+        placeholders.push(format!("details = ${}", values.len() + 1).to_string());
         values.push(&body_params.details);
     }
 
     if body_params.done.is_some() {
-        placeholders.push(format!("done = ${}", values.len()+1).to_string());
+        placeholders.push(format!("done = ${}", values.len() + 1).to_string());
         values.push(&body_params.done);
     }
 
     let set_clause = placeholders.join(", ");
     stmt = stmt.replace("$set_clause", &set_clause);
+    let stmt = client.prepare(&stmt).await.unwrap();
 
-    let rows = client
-        .query(&stmt, &values)
-        .await?;
+    let rows = client.query(&stmt, &values).await?;
 
     if let Some(row) = rows.first() {
         let note = Note::from_row(row.clone())?;
@@ -177,11 +178,32 @@ pub async fn update_one_note(
     } else {
         Err(MyError::NotFound)
     }
-    
 }
 
 /* DELETE */
 #[warn(dead_code)]
-pub async fn delete_many_notes() -> HttpResponse {
-    return HttpResponse::Ok().body("eliminar varias notas");
+pub async fn delete_many_notes(
+    body: web::Json<Ids>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, MyError> {
+    let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+
+    let ids_params: Vec<i64> = body.ids.iter().map(|id| *id as i64).collect();
+    let placeholders: Vec<String> = (1..=ids_params.len()).map(|i| format!("${}", i)).collect();
+    let ids = ids_params
+        .iter()
+        .map(|id| id as &(dyn ToSql + Sync))
+        .collect::<Vec<_>>();
+
+    let mut stmt = include_str!("./querys/delete_notes.sql").to_string();
+    stmt = stmt.replace("$ids", &placeholders.join(", "));
+   
+    let rows = client.query(&stmt, &ids).await?;
+
+   if let Some(row) = rows.first() {
+        let note = Note::from_row(row.clone())?;
+        Ok(HttpResponse::Ok().json(note))
+    } else {
+        Err(MyError::NotFound)
+    }
 }

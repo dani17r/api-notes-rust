@@ -29,6 +29,11 @@ pub struct NoteUseUpdate {
     pub done: Option<bool>,
 }
 
+#[derive(Deserialize)]
+pub struct Ids {
+    pub ids: Vec<u64>,
+}
+
 impl Note {
     pub fn from_row_option(row: &Row, fields: &str) -> Result<Note, &'static str> {
         let _fields_: Vec<&str> = fields.split(',').collect();

@@ -1,0 +1,3 @@
+DELETE FROM notes 
+WHERE id IN ($ids) 
+RETURNING *;
