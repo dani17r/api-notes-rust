@@ -8,6 +8,7 @@ pub fn routes() -> Scope {
             web::scope("/api")
             .service(module::tags::router::routes())
             .service(module::notes::router::routes())
+            .service(module::categories::router::routes())
             .service(module::default::router::routes())
         )    
         .route("/", web::get().to(module::default::controller::empty))
