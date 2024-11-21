@@ -1,0 +1,7 @@
+CREATE TABLE note_tags (
+    id BIGSERIAL PRIMARY KEY,
+    note_id BIGINT NOT NULL,
+    tag_id BIGINT NOT NULL,
+    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);

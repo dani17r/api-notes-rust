@@ -1,7 +1,13 @@
 [package]
-name = "b"
+name = "main"
 version = "0.1.0"
 edition = "2021"
+
+default-run = "main"
+
+[[bin]]
+name = "migrations"
+path = "migrations/main.rs"
 
 [dependencies]
 utility-types = "0.0.4"
@@ -18,4 +24,7 @@ derive_more = { version = "1.0.0", features = ["full"] }
 tokio-pg-mapper = "0.2.0"
 tokio-pg-mapper-derive = "0.2.0"
 tokio-postgres = "0.7.11"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.6"
 ordermap = { version="0.5.3", features = ["serde"] }
+actix-cors = "0.7.0"

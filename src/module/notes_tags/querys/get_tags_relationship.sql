@@ -1,0 +1,1 @@
+COALESCE(json_agg(json_build_object('id', tags.id $fields_relationship)) FILTER (WHERE tags.id IS NOT NULL), '[]'::json) AS tags

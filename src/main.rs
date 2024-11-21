@@ -8,14 +8,14 @@ mod core;
 mod module;
 mod utils;
 
-use crate::core::database::config::ExampleConfig;
+use crate::core::database::config::ServerConfig;
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
     dotenv().ok();
     core::logs::main();
 
-    let config = ExampleConfig::builder()
+    let config = ServerConfig::builder()
         .override_with(EnvSource::new())
         .try_build()
         .unwrap();
@@ -24,6 +24,7 @@ async fn main() -> io::Result<()> {
 
     return HttpServer::new(move || {
         App::new()
+            .wrap(core::cors::config())
             .wrap(middleware::Compress::default())
             .wrap(middleware::Logger::default())
             .app_data(web::Data::new(pool.clone()))

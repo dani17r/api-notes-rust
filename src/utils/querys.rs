@@ -5,9 +5,14 @@ use crate::module::default::{
     types::QuerysParams,
 };
 use actix_web::web;
+// use std::collections::HashSet;
 use tokio_pg_mapper::FromTokioPostgresRow;
-
 //--------------------------------------------------------------
+
+// fn remove_duplicates(vec: Vec<String>) -> Vec<String> {
+//     let set: HashSet<String> = vec.into_iter().collect(); // Convierte el vector en un HashSet
+//     return set.into_iter().collect(); // Convierte el HashSet de nuevo a un vector
+// }
 
 pub fn get_search<T: FromTokioPostgresRow>(
     query: &web::Query<QuerysParams>,
@@ -103,13 +108,13 @@ pub fn get_fields<T: FromTokioPostgresRow>(
     if !fields.is_empty() {
         let fields_table = T::sql_table_fields();
         let valid_fields = FieldOperations::get_fields(&fields_table);
-        let selected_fields =
-            FieldOperations::get_select_fields(&fields.split(",").collect(), &fields_table);
+        let field_with_prefix: Vec<&str> = fields.split(",").collect();
+        let selected_fields = FieldOperations::get_select_fields(&field_with_prefix, &fields_table);
 
         if selected_fields.is_empty() {
             fields_select = valid_fields
                 .iter()
-                .map(|&field| field.to_string())
+                .map(|field| field.trim().to_string())
                 .collect();
 
             return (
@@ -118,34 +123,43 @@ pub fn get_fields<T: FromTokioPostgresRow>(
                 fields_select.join(", ").to_string(),
             );
         } else {
-            fields_select = selected_fields
-                .iter()
-                .map(|f| {
-                    if without {
-                        let filtered_fields: Vec<&str> = fields_table
-                            .split(',')
-                            .map(|s| s.trim().split('.').last().unwrap().trim())
-                            .filter(|x| !x.contains(&"id"))
-                            .filter(|&field| field.trim() != f.trim().to_string())
-                            .collect();
-                        return filtered_fields.join(",");
-                    } else {
-                        return f.to_string();
-                    }
-                })
-                .collect();
-            return (
-                fields.to_string(),
-                without,
-                fields_select.join(", ").to_string(),
-            );
+            if without {
+                let filtered_fields: Vec<String> = fields_table
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|x| !x.contains(&"id"))
+                    .filter(|field| {
+                        let new_field = field.trim().split(".").last().unwrap();
+                        !selected_fields.join(", ").contains(new_field.trim())
+                    })
+                    .collect();
+
+                return (
+                    fields.to_string(),
+                    without,
+                    filtered_fields.join(", ").trim().to_string(),
+                );
+            } else {
+                return (
+                    fields.to_string(),
+                    without,
+                    selected_fields.join(", ").trim().to_string(),
+                );
+            }
         }
     } else {
-        return (fields.to_string(), without, "*".to_string());
+        let fields_table = T::sql_table_fields();
+        let filtered_fields: Vec<_> = fields_table
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|x| !x.contains(&"id"))
+            .collect();
+
+        return (fields.to_string(), without, filtered_fields.join(", "));
     }
 }
 
-pub fn get_response(data: GetResponseParams) -> ResponseData {
+pub fn get_response<T>(data: GetResponseParams<T>) -> ResponseData<T> {
     let pagination = PaginationResponse {
         count_total: data.count_total,
         count: data.count,

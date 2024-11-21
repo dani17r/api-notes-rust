@@ -2,19 +2,16 @@ use crate::{
     core::database::errors::MyError,
     module::{
         default::{
-            models::GetResponseParams,
+            models::{FieldOperations, GetResponseParams},
             types::{QuerysParams, VecJson},
         },
-        notes::models::{Note, NoteUseCreate, NoteUseUpdate},
+        notes::models::{Ids, Note, NoteUseCreate, NoteUseUpdate},
     },
     utils::querys::{get_fields, get_pagination, get_response, get_search, get_sort},
 };
 use actix_web::{web, HttpResponse};
 use deadpool_postgres::{Client, GenericClient, Pool};
-use tokio_pg_mapper::FromTokioPostgresRow;
 use tokio_postgres::types::ToSql;
-
-use super::models::Ids;
 
 //--------------------------------------------------------------
 
@@ -32,11 +29,38 @@ pub async fn get_many_notes(
     let (limit, pag, offset) = get_pagination::<Note>(&query);
 
     let mut stmt = include_str!("./querys/get_notes.sql").to_string();
+    let mut validate_relationship = "".to_string();
+    let consult_valid_fields: String;
+
+    let valid_fields_with_ship: Vec<String> =
+        FieldOperations::get_fields_iterator(&valid_fields, &"notes.".to_string()).collect();
+
+    let valid_fields_without_ship: Vec<String> =
+        FieldOperations::get_fields_iterator(&valid_fields, &"notes.".to_string())
+            .filter(|x| !x.contains("tags"))
+            .collect();
+
+    if valid_fields.contains(&"tags".to_string()) {
+        let mut stmt_tags =
+            include_str!("../notes_tags/querys/get_tags_relationship.sql").to_string();
+        stmt_tags = stmt_tags.replace(
+            "$fields_relationship",
+            &", 'name', tags.name, 'description', tags.description, 'color', tags.color",
+        );
+        validate_relationship = format!(", {}", &stmt_tags);
+    }
+
+    if valid_fields_without_ship.len() >= 1 {
+        consult_valid_fields = format!(", {}", valid_fields_without_ship.join(", ")).to_string();
+    } else {
+        consult_valid_fields = valid_fields_without_ship.join(", ").to_string();
+    }
 
     stmt = stmt
+        .replace("$table_fields", &consult_valid_fields)
+        .replace("$relationship", &validate_relationship)
         .replace("$offset_pag", &offset.to_string())
         .replace("$limit_pag", &limit.to_string())
-        .replace("$table_fields", &valid_fields)
         .replace("$_SEARCH_", &search_query)
         .replace("$sort_field", &sort_field)
         .replace("$sort_order", &sort_order);
@@ -47,7 +71,7 @@ pub async fn get_many_notes(
         .query(&stmt, &[])
         .await?
         .iter()
-        .map(|row| Note::from_row_option(row, &valid_fields).unwrap())
+        .map(|row| Note::from_row_option(row, &valid_fields_with_ship.join(", ")).unwrap())
         .map(|note| note.to_filtered_map())
         .collect::<VecJson>();
 
@@ -55,9 +79,9 @@ pub async fn get_many_notes(
     let count = results.len();
 
     let response_data = get_response(GetResponseParams {
+        results: results.clone(),
         fields_search,
         count_total,
-        results,
         without,
         search,
         fields,
@@ -67,7 +91,11 @@ pub async fn get_many_notes(
         sort,
     });
 
-    return Ok(HttpResponse::Ok().json(response_data));
+    if results.is_empty() {
+        return Err(MyError::NotFound);
+    }
+
+    Ok(HttpResponse::Ok().json(response_data))
 }
 
 /* GET */
@@ -80,11 +108,34 @@ pub async fn get_one_note(
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
 
     let mut stmt = include_str!("./querys/get_one_note.sql").to_string();
+    let mut validate_relationship = "".to_string();
+    let consult_valid_fields: String;
 
     let (_, _, valid_fields) = get_fields::<Note>(&query);
+    let valid_fields_without_ship: Vec<String> =
+        FieldOperations::get_fields_iterator(&valid_fields, &"notes.".to_string())
+            .filter(|x| !x.contains("tags"))
+            .collect();
+
+    if valid_fields.contains(&"tags".to_string()) {
+        let mut stmt_tags =
+            include_str!("../notes_tags/querys/get_tags_relationship.sql").to_string();
+        stmt_tags = stmt_tags.replace(
+            "$fields_relationship",
+            &", 'name', tags.name, 'description', tags.description, 'color', tags.color",
+        );
+        validate_relationship = format!(", {}", &stmt_tags);
+    }
+
+    if valid_fields_without_ship.len() >= 1 {
+        consult_valid_fields = format!(", {}", valid_fields_without_ship.join(", ")).to_string();
+    } else {
+        consult_valid_fields = valid_fields_without_ship.join(", ").to_string();
+    }
 
     stmt = stmt
-        .replace("$table_fields", &valid_fields)
+        .replace("$table_fields", &consult_valid_fields)
+        .replace("$relationship", &validate_relationship)
         .replace("$id_note", &id.to_string());
     let stmt = client.prepare(&stmt).await.unwrap();
 
@@ -93,14 +144,13 @@ pub async fn get_one_note(
         .await?
         .iter()
         .map(|row| Note::from_row_option(row, &valid_fields).unwrap())
-        .map(|note| note.to_filtered_map())
-        .collect::<VecJson>();
+        .collect::<Vec<Note>>();
 
     if results.is_empty() {
         return Err(MyError::NotFound);
     }
 
-    return Ok(HttpResponse::Ok().json(results.get(0)));
+    return Ok(HttpResponse::Ok().json(results.first()));
 }
 
 /* POST */
@@ -112,6 +162,9 @@ pub async fn create_one_note(
     let body_params: NoteUseCreate = body.into_inner();
 
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let valid_fields_with_ship: Vec<String> =
+        FieldOperations::get_fields_iterator(&"title,details,done,rank", &"notes.".to_string())
+            .collect();
 
     let stmt = include_str!("./querys/add_note.sql");
     let stmt = client.prepare(&stmt).await.unwrap();
@@ -123,16 +176,19 @@ pub async fn create_one_note(
                 &body_params.title,
                 &body_params.details,
                 &body_params.done.unwrap_or(false),
+                &body_params.rank.unwrap_or(0),
             ],
         )
         .await?
         .iter()
-        .map(|row| Note::from_row_ref(row).unwrap())
-        .collect::<Vec<Note>>()
-        .pop()
-        .ok_or(MyError::NotFound);
+        .map(|row| Note::from_row_option(row, &valid_fields_with_ship.join(", ")).unwrap())
+        .collect::<Vec<Note>>();
 
-    return Ok(HttpResponse::Ok().json(result.unwrap()));
+    if result.is_empty() {
+        return Err(MyError::NotFound);
+    }
+
+    Ok(HttpResponse::Ok().json(result.first()))
 }
 
 /* PUT */
@@ -144,6 +200,9 @@ pub async fn update_one_note(
     let body_params: NoteUseUpdate = body.into_inner();
 
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let valid_fields_with_ship: Vec<String> =
+        FieldOperations::get_fields_iterator(&"title,details,done,rank", &"notes.".to_string())
+            .collect();
 
     let mut stmt = include_str!("./querys/update_note.sql").to_string();
     let mut placeholders = Vec::new();
@@ -166,18 +225,27 @@ pub async fn update_one_note(
         values.push(&body_params.done);
     }
 
+    if body_params.rank.is_some() {
+        placeholders.push(format!("rank = ${}", values.len() + 1).to_string());
+        values.push(&body_params.rank);
+    }
+
     let set_clause = placeholders.join(", ");
     stmt = stmt.replace("$set_clause", &set_clause);
     let stmt = client.prepare(&stmt).await.unwrap();
 
-    let rows = client.query(&stmt, &values).await?;
+    let result = client
+        .query(&stmt, &values)
+        .await?
+        .iter()
+        .map(|row| Note::from_row_option(row, &valid_fields_with_ship.join(", ")).unwrap())
+        .collect::<Vec<Note>>();
 
-    if let Some(row) = rows.first() {
-        let note = Note::from_row(row.clone())?;
-        Ok(HttpResponse::Ok().json(note))
-    } else {
-        Err(MyError::NotFound)
+    if result.is_empty() {
+        return Err(MyError::NotFound);
     }
+
+    Ok(HttpResponse::Ok().json(result.first()))
 }
 
 /* DELETE */
@@ -188,6 +256,9 @@ pub async fn delete_many_notes(
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
 
+    let valid_fields_with_ship: Vec<String> =
+        FieldOperations::get_fields_iterator(&"title, details, done, rank", &"notes.".to_string())
+            .collect();
     let ids_params: Vec<i64> = body.ids.iter().map(|id| *id as i64).collect();
     let placeholders: Vec<String> = (1..=ids_params.len()).map(|i| format!("${}", i)).collect();
     let ids = ids_params
@@ -197,13 +268,18 @@ pub async fn delete_many_notes(
 
     let mut stmt = include_str!("./querys/delete_notes.sql").to_string();
     stmt = stmt.replace("$ids", &placeholders.join(", "));
-   
-    let rows = client.query(&stmt, &ids).await?;
 
-   if let Some(row) = rows.first() {
-        let note = Note::from_row(row.clone())?;
-        Ok(HttpResponse::Ok().json(note))
-    } else {
-        Err(MyError::NotFound)
+    let results = client
+        .query(&stmt, &ids)
+        .await?
+        .iter()
+        .map(|row| Note::from_row_option(row, &valid_fields_with_ship.join(", ")).unwrap())
+        .map(|note| note.to_filtered_map())
+        .collect::<VecJson>();
+
+    if results.is_empty() {
+        return Err(MyError::NotFound);
     }
+
+    Ok(HttpResponse::Ok().json(results))
 }

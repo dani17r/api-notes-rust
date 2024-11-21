@@ -5,5 +5,6 @@ CREATE TABLE notes (
 	id  BIGSERIAL PRIMARY KEY,
 	title       VARCHAR(120) NOT NULL,
 	details     VARCHAR(250) NOT NULL,
-	done        BOOLEAN NOT NULL
+	done        BOOLEAN NOT NULL,
+	rank        INTEGER
 );
