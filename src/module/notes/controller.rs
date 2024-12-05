@@ -7,7 +7,9 @@ use crate::{
         },
         notes::models::{Ids, Note, NoteUseCreate, NoteUseUpdate},
     },
-    utils::querys::{get_fields, get_pagination, get_response, get_search, get_sort},
+    utils::querys::{
+        get_conditionals, get_pagination, get_params, get_response, get_search, get_sort,
+    },
 };
 use actix_web::{web, HttpResponse};
 use deadpool_postgres::{Client, GenericClient, Pool};
@@ -22,11 +24,13 @@ pub async fn get_many_notes(
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let fields_string = Note::get_fields_string();
 
-    let (search, fields_search, search_query) = get_search::<Note>(&query);
-    let (fields, without, valid_fields) = get_fields::<Note>(&query);
-    let (sort, sort_field, sort_order) = get_sort::<Note>(&query);
-    let (limit, pag, offset) = get_pagination::<Note>(&query);
+    let (search, fields_search, mut search_query) = get_search(&fields_string, &query);
+    let (conditionals, conditionals_query) = get_conditionals(&fields_string, &query);
+    let (fields, without, valid_fields) = get_params(&fields_string, &query);
+    let (sort, sort_field, sort_order) = get_sort(&query);
+    let (limit, pag, offset) = get_pagination(&query);
 
     let mut stmt = include_str!("./querys/get_notes.sql").to_string();
     let mut validate_relationship = "".to_string();
@@ -51,14 +55,23 @@ pub async fn get_many_notes(
     }
 
     if valid_fields_without_ship.len() >= 1 {
-        consult_valid_fields = format!(", {}", valid_fields_without_ship.join(", ")).to_string();
+        consult_valid_fields = format!(", {}", &valid_fields_without_ship.join(", ")).to_string();
     } else {
-        consult_valid_fields = valid_fields_without_ship.join(", ").to_string();
+        consult_valid_fields = valid_fields_without_ship.join(", ");
+    }
+
+    if !search_query.is_empty() {
+        if conditionals_query.contains("WHERE") {
+            search_query = format!("AND {}", search_query);
+        } else if conditionals_query.is_empty() {
+            search_query = format!("WHERE {}", search_query);
+        }
     }
 
     stmt = stmt
         .replace("$table_fields", &consult_valid_fields)
         .replace("$relationship", &validate_relationship)
+        .replace("$_CONDITIONALS_", &conditionals_query)
         .replace("$offset_pag", &offset.to_string())
         .replace("$limit_pag", &limit.to_string())
         .replace("$_SEARCH_", &search_query)
@@ -82,6 +95,7 @@ pub async fn get_many_notes(
         results: results.clone(),
         fields_search,
         count_total,
+        conditionals,
         without,
         search,
         fields,
@@ -106,12 +120,13 @@ pub async fn get_one_note(
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let fields_string = Note::get_fields_string();
 
     let mut stmt = include_str!("./querys/get_one_note.sql").to_string();
     let mut validate_relationship = "".to_string();
     let consult_valid_fields: String;
 
-    let (_, _, valid_fields) = get_fields::<Note>(&query);
+    let (_, _, valid_fields) = get_params(&fields_string, &query);
     let valid_fields_without_ship: Vec<String> =
         FieldOperations::get_fields_iterator(&valid_fields, &"notes.".to_string())
             .filter(|x| !x.contains("tags"))

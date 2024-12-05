@@ -1,0 +1,82 @@
+{
+  // Use IntelliSense para saber los atributos posibles.
+  // Mantenga el puntero para ver las descripciones de los existentes atributos.
+  // Para más información, visite: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'main'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=main",
+          "--package=main"
+        ],
+        "filter": {
+          "name": "main",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'main'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=main",
+          "--package=main"
+        ],
+        "filter": {
+          "name": "main",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'migrations'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=migrations",
+          "--package=main"
+        ],
+        "filter": {
+          "name": "migrations",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'migrations'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=migrations",
+          "--package=main"
+        ],
+        "filter": {
+          "name": "migrations",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

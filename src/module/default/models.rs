@@ -17,6 +17,7 @@ pub struct PaginationResponse {
 #[derive(Debug, Serialize)]
 pub struct FilterResponse {
     pub fields_search: String,
+    pub conditionals: String,
     pub search: String,
     pub fields: String,
     pub without: bool,
@@ -36,6 +37,7 @@ pub struct GetResponseParams<T = VecJson> {
     pub pag: u8,
     pub limit: u8,
     pub fields_search: String,
+    pub conditionals: String,
     pub search: String,
     pub fields: String,
     pub without: bool,
@@ -81,12 +83,12 @@ impl FieldOperations {
         return value_fields;
     }
 
-    pub fn get_select_fields<'a>(valid_fields: &Vec<&'a str>, fields: &'a String) -> Vec<&'a str> {
-        let selected_fields = fields
+    pub fn get_select_fields<'a>(fields: &Vec<&'a str>, fields_table: &'a String) -> Vec<&'a str> {
+        let selected_fields = fields_table
             .split(',')
             .filter_map(|f| {
                 let field = f.trim().split(".").last().unwrap().trim();
-                if valid_fields.contains(&field) {
+                if fields.contains(&field) {
                     Some(field)
                 } else {
                     None

@@ -5,7 +5,7 @@ use serde_json::Value;
 use tokio_pg_mapper_derive::PostgresMapper;
 use tokio_postgres::Row;
 
-use crate::module::tags::models::{Tag, TagVec};
+use crate::{module::tags::models::{Tag, TagVec}, utils::querys::{DbFields, Fields}};
 
 #[derive(Default, Debug, Deserialize, PostgresMapper, Serialize)]
 #[pg_mapper(table = "notes")]
@@ -134,5 +134,23 @@ impl Note {
         let row = client.query_one(&stmt_count, &[]).await?;
         let count: i64 = row.get(0);
         Ok(count)
+    }
+
+    pub fn get_fields_string() -> Fields {
+        Fields {
+            db: DbFields {
+                all: "notes.id, notes.title, notes.details, notes.done, notes.rank, notes.tags".to_string(),
+                without_id: "notes.title, notes.details, notes.done, notes.rank, notes.tags".to_string(),
+                // without_ship: "notes.id, notes.title, notes.details, notes.done, notes.rank".to_string(),
+                without_id_ship: "notes.title, notes.details, notes.done, notes.rank".to_string(),
+            },
+            // normal: {
+            //     "id, title, details, done, rank, tags".to_string(),
+            //     "title, details, done, rank, tags".to_string(),
+            //     "title, details, done, rank".to_string(),
+            // },
+            searchs: "title, details".to_string(),
+            conditionals: "done, rank".to_string(),
+        }
     }
 }

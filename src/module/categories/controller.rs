@@ -7,7 +7,7 @@ use crate::{
         },
         categories::models::{Category, CategoryUseCreate, CategoryUseUpdate},
     },
-    utils::querys::{get_fields, get_pagination, get_response, get_search, get_sort},
+    utils::querys::{get_params, get_pagination, get_response, get_search, get_sort},
 };
 use actix_web::{web, HttpResponse};
 use deadpool_postgres::{Client, GenericClient, Pool};
@@ -25,11 +25,12 @@ pub async fn get_many_categories(
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
-
-    let (search, fields_search, search_query) = get_search::<Category>(&query);
-    let (fields, without, valid_fields) = get_fields::<Category>(&query);
-    let (sort, sort_field, sort_order) = get_sort::<Category>(&query);
-    let (limit, pag, offset) = get_pagination::<Category>(&query);
+    let fields_string= Category::get_fields_string();
+    
+    let (search, fields_search, search_query) = get_search(&fields_string, &query);
+    let (fields, without, valid_fields) = get_params(&fields_string, &query);
+    let (sort, sort_field, sort_order) = get_sort(&query);
+    let (limit, pag, offset) = get_pagination(&query);
 
     let mut stmt = include_str!("./querys/get_categories.sql").to_string();
 
@@ -56,6 +57,7 @@ pub async fn get_many_categories(
 
     let response_data = get_response(GetResponseParams {
         fields_search,
+        conditionals: "".to_string(),
         count_total,
         results,
         without,
@@ -78,10 +80,11 @@ pub async fn get_one_category(
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let fields_string= Category::get_fields_string();
 
     let mut stmt = include_str!("./querys/get_one_category.sql").to_string();
 
-    let (_, _, valid_fields) = get_fields::<Category>(&query);
+    let (_, _, valid_fields) = get_params(&fields_string, &query);
 
     stmt = stmt
         .replace("$table_fields", &valid_fields)
@@ -108,10 +111,10 @@ pub async fn create_one_category(
     body: web::Json<CategoryUseCreate>,
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
-    let body_params: CategoryUseCreate = body.into_inner();
-
+    
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
-
+    
+    let body_params: CategoryUseCreate = body.into_inner();
     let stmt = include_str!("./querys/add_category.sql");
     let stmt = client.prepare(&stmt).await.unwrap();
 

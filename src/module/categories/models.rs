@@ -9,7 +9,7 @@ use tokio_postgres::{
     Row,
 };
 
-use crate::module::default::models::FieldOperations;
+use crate::{module::default::models::FieldOperations, utils::querys::{DbFields, Fields}};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CategoryVec(pub Vec<Category>);
@@ -115,5 +115,24 @@ impl Category {
         let row = client.query_one(&stmt_count, &[]).await?;
         let count: i64 = row.get(0);
         Ok(count)
+    }
+
+    pub fn get_fields_string() -> Fields {
+        Fields {
+            db: DbFields {
+                all: "categories.id, categories.title, categories.description"
+                    .to_string(),
+                without_id: "categories.title, categories.description".to_string(),
+                // without_ship: "".to_string(),
+                without_id_ship: "".to_string(),
+            },
+            // normal: (
+            //     "id, title, description".to_string(),
+            //     "title, description".to_string(),
+            //     "".to_string(),
+            // ),
+            searchs: "title, description".to_string(),
+            conditionals: "".to_string(),
+        }
     }
 }

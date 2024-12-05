@@ -7,7 +7,7 @@ use crate::{
         },
         tags::models::{Tag, TagUseCreate, TagUseUpdate},
     },
-    utils::querys::{get_fields, get_pagination, get_response, get_search, get_sort},
+    utils::querys::{get_params, get_pagination, get_response, get_search, get_sort},
 };
 use actix_web::{web, HttpResponse};
 use deadpool_postgres::{Client, GenericClient, Pool};
@@ -25,11 +25,12 @@ pub async fn get_many_tags(
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let fields_string= Tag::get_fields_string();
 
-    let (search, fields_search, search_query) = get_search::<Tag>(&query);
-    let (fields, without, valid_fields) = get_fields::<Tag>(&query);
-    let (sort, sort_field, sort_order) = get_sort::<Tag>(&query);
-    let (limit, pag, offset) = get_pagination::<Tag>(&query);
+    let (search, fields_search, search_query) = get_search(&fields_string,&query);
+    let (fields, without, valid_fields) = get_params(&fields_string, &query);
+    let (sort, sort_field, sort_order) = get_sort(&query);
+    let (limit, pag, offset) = get_pagination(&query);
 
     let mut stmt = include_str!("./querys/get_tags.sql").to_string();
 
@@ -57,6 +58,7 @@ pub async fn get_many_tags(
     let response_data = get_response(GetResponseParams {
         fields_search,
         count_total,
+        conditionals: "".to_string(),
         results,
         without,
         search,
@@ -78,10 +80,11 @@ pub async fn get_one_tag(
     db_pool: web::Data<Pool>,
 ) -> Result<HttpResponse, MyError> {
     let client: Client = db_pool.get().await.map_err(MyError::PoolError)?;
+    let fields_string= Tag::get_fields_string();
 
     let mut stmt = include_str!("./querys/get_one_tag.sql").to_string();
 
-    let (_, _, valid_fields) = get_fields::<Tag>(&query);
+    let (_, _, valid_fields) = get_params(&fields_string, &query);
 
     stmt = stmt
         .replace("$table_fields", &valid_fields)
